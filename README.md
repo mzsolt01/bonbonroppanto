@@ -4,8 +4,17 @@ Candy Crush-szerű, hármas párosítós böngészős játék iPhone-ra. Egyetle
 
 ## Futtatás
 
-- Gépen: nyisd meg az `index.html`-t böngészőben, vagy indíts egy helyi szervert: `python -m http.server 8765`
-- iPhone-on: a Claude artifact linkjéről, vagy bármilyen statikus tárhelyről (pl. GitHub Pages). Safariban Megosztás → Főképernyőhöz adás, és appként indul.
+- Online: https://mzsolt01.github.io/bonbonroppanto/ (GitHub Pages, a `master` ágból).
+- iPhone-on: nyisd meg a fenti címet Safariban, majd Megosztás → Főképernyőhöz adás. Saját ikonnal, teljes képernyőn indul, és az első megnyitás után internet nélkül is működik.
+- Gépen: `python -m http.server 8765`, majd http://127.0.0.1:8765/
+
+## Kiadás
+
+1. Módosítsd az `index.html`-t.
+2. Növeld a `VERSION` értékét az `sw.js`-ben (pl. `bonbon-v2`), különben a telefonok a régi, eltárolt változatot mutatják tovább.
+3. `git commit` és `git push`; a GitHub Pages pár percen belül frissül.
+
+Az ikonokat a `tools/make_icons.py` állítja elő.
 
 ## Játékelemek
 
@@ -14,11 +23,13 @@ Candy Crush-szerű, hármas párosítós böngészős játék iPhone-ra. Egyetle
 - Szintcélok: pontszám, színgyűjtés, zselétakarítás. A szintek elrendezése a szintszámból generálódik (`makeLevel`), így újrapróbálásnál ugyanaz marad.
 - Pályaformák (`SHAPES`): négyzet, széles, kör, kereszt, szív, fánk, homokóra, ikertorony. A `#` mező, a `.` lyuk; a bonbonok a lyukakon átesnek, az új bonbonok minden oszlop legfelső mezőjén érkeznek.
 - Kezdőképernyő: animált cukrászda-jelenet (`drawHome`). Egy épületre koppintva alulról felcsúszik a fejlesztési panel; alul a Játék, Szintek és Szabályok gomb.
-- Cukrászda (bázis, `BUILDINGS`): a szintekért cukor, kakaó és zselé jár (vesztes szintért 40%). Négy épület, egyenként 5 szinttel:
-  - Konyha: +1 lépés szintenként
-  - Csokoládéüzem: különleges bonbonok a tábla indulásakor
-  - Fakanálműhely: fakanál-töltések, bármely mezőt szétüti lépés nélkül
+- Cukrászda (bázis, `BUILDINGS`): a szintekért cukor, kakaó és zselé jár (vesztes szintért 40%). Öt épület, egyenként 5 szinttel:
+  - Konyha: +1 lépés szintenként, a 2. szinttől szabad csere
+  - Csokoládéüzem: különleges bonbonok a tábla indulásakor, a 3. szinttől csokiöntés
+  - Cukrászműhely: habverő
+  - Fakanálműhely: fakanál
   - Kirakat: több nyersanyag
+- Boosterek (`BOOSTS`, egyik sem kerül lépésbe): fakanál (egy mező), habverő (egy sor), csokiöntés (egy szín), szabad csere, keverés (szintenként 1). Vesztéskor +5 lépés vásárolható nyersanyagért, szintenként egyszer.
 - A haladás, a nyersanyagok és az épületek a böngésző `localStorage`-ában tárolódnak.
 
 ## Artifact közzététel

@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonbon">
 <meta name="theme-color" content="#2a0e3a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <!-- ARTIFACT-START -->
 <title>Bonbonroppantó</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -173,7 +176,26 @@
   .beff span { color: var(--mist); font-weight: 700; }
   .bfoot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
   .costs { display: flex; gap: 10px; flex-wrap: wrap; }
-  @media (max-height: 640px) { .val { font-size: 22px; } .app { gap: 8px; } }
+  .boosts { display: flex; justify-content: center; gap: 8px; }
+  .bst {
+    position: relative; flex: 0 1 60px; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 6px 2px 5px; border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-line);
+    color: var(--cream); font: 800 10.5px/1.1 'Nunito', system-ui, sans-serif;
+  }
+  .bst svg { width: 26px; height: 26px; }
+  .bst span:not(.cnt) { white-space: nowrap; }
+  .bst .cnt {
+    position: absolute; top: -7px; right: -3px; min-width: 18px; height: 18px; box-sizing: border-box; padding: 0 4px;
+    border-radius: 9px; background: var(--rose); color: var(--plum); font: 800 12px/18px 'Baloo 2', system-ui, sans-serif; text-align: center;
+  }
+  .bst.empty { opacity: .45; }
+  .bst.empty .cnt { background: rgba(255, 255, 255, .25); color: var(--cream); }
+  .bst.on { background: var(--gold); color: var(--plum); border-color: var(--gold); opacity: 1; }
+  .boosthint { margin: 0; text-align: center; font-size: 13px; font-weight: 800; color: var(--gold); text-wrap: balance; }
+  .rules svg { width: 30px; height: 30px; justify-self: center; }
+  #plusBtn .rc svg { width: 18px; height: 18px; }
+  #plusBtn .rc b { font-size: 16px; color: var(--plum); }
+  @media (max-height: 640px) { .val { font-size: 22px; } .app { gap: 8px; } .bst span:not(.cnt) { display: none; } }
 </style>
 </head>
 <body>
@@ -185,10 +207,11 @@
     <div class="pill" id="mvPill"><div class="lbl">Lépés</div><div class="val" id="mv">24</div></div>
   </header>
   <main class="boardwrap" id="wrap"><div class="tray"><canvas id="board" aria-label="Játéktábla"></canvas></div></main>
+  <p class="boosthint" id="boostHint" hidden></p>
+  <div class="boosts" id="boostBar" aria-label="Boosterek"></div>
   <footer class="bar">
     <button class="ghost" id="menuBtn" type="button">Cukrászda</button>
     <span class="score" id="scoreTxt">0 pont</span>
-    <button class="ghost" id="hamBtn" type="button" hidden>Fakanál · 0</button>
   </footer>
 </div>
 
@@ -237,6 +260,9 @@
       <li><canvas id="icoLock"></canvas><div><b>Lakat:</b> <span>a lelakatolt bonbon nem mozdítható. Rakd ki a színével egy sorba, és kinyílik.</span></div></li>
       <li><canvas id="icoBlock"></canvas><div><b>Karamellkocka:</b> <span>nem mozdul, és elzárja az utat. A mellette roppanó bonbonok törik szét. A habos tetejű kétszer kell.</span></div></li>
     </ul>
+    <div class="sect">Boosterek</div>
+    <p class="tip">A pálya alatti gombokkal vetheted be őket. Egyik sem kerül lépésbe.</p>
+    <ul class="rules" id="boostRules"></ul>
     <p class="tip">A tábla formája szintenként változik. A lyukakon a bonbonok átesnek.</p>
     <p class="tip">A szintekért cukor, kakaó és zselé jár. Ebből fejlesztheted a cukrászda épületeit; a fejlesztések a következő szint indításától érvényesek.</p>
     <p class="tip">Tipp: Safariban a Megosztás → Főképernyőhöz adás menüvel saját ikont kap, és teljes képernyőn indul.</p>
@@ -264,6 +290,7 @@
     <p class="tip">Ennyi nyersanyagot így is összeszedtél:</p>
     <div class="loot" id="loseLoot"></div>
     <div class="row">
+      <button class="btn alt" id="plusBtn" type="button">+5 lépés</button>
       <button class="btn" id="retryBtn" type="button">Újrapróbálom</button>
       <button class="ghost" id="loseHome" type="button">Vissza a cukrászdába</button>
     </div>
@@ -306,16 +333,40 @@
   };
   const RES_KEYS = ['cukor', 'kakao', 'zsele'];
   const HAMMER = [0, 1, 2, 3, 4, 5];
+  const WHISK = [0, 1, 1, 2, 2, 3];
+  const POUR = [0, 0, 0, 1, 1, 2];
+  const FREESWAP = [0, 0, 1, 1, 2, 2];
+  const PLUS_COST = { cukor: 120, kakao: 10 };
+  const BOOSTS = [
+    { id: 'hammer', name: 'Fakanál', desc: 'egy tetszőleges mezőt szétüt, a karamellkockát is egy ütéssel',
+      use: 'Koppints egy mezőre, és a fakanál szétüti.', from: 'A Fakanálműhely adja.',
+      svg: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20 L13.5 9.5" stroke="#e8c48f" stroke-width="2.8" stroke-linecap="round"/><ellipse cx="16.3" cy="6.4" rx="3.6" ry="5" transform="rotate(38 16.3 6.4)" fill="#e8c48f"/><ellipse cx="16.3" cy="6.4" rx="1.8" ry="3" transform="rotate(38 16.3 6.4)" fill="#c99a6a"/></svg>' },
+    { id: 'whisk', name: 'Habverő', desc: 'egy teljes sort letarol',
+      use: 'Koppints egy sorra, és a habverő letarolja.', from: 'A Cukrászműhely adja.',
+      svg: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22 V15.5" stroke="#ff8fc2" stroke-width="3.2" stroke-linecap="round"/><g fill="none" stroke="#e8e4f0" stroke-width="1.4"><ellipse cx="12" cy="8.6" rx="1.4" ry="6.6"/><ellipse cx="12" cy="8.6" rx="3.6" ry="6.6"/><ellipse cx="12" cy="8.6" rx="5.8" ry="6.6"/></g></svg>' },
+    { id: 'pour', name: 'Csoki', desc: 'egy választott szín összes bonbonját eltünteti',
+      use: 'Koppints egy bonbonra: az összes ilyen színű eltűnik.', from: 'A Csokoládéüzem adja a 3. szinttől.',
+      svg: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 C12 2.5 5.5 10.5 5.5 14.8 a6.5 6.5 0 0 0 13 0 C18.5 10.5 12 2.5 12 2.5 Z" fill="#8a4f2a"/><ellipse cx="9.4" cy="14" rx="1.6" ry="2.5" fill="#c08a5e"/></svg>' },
+    { id: 'swap', name: 'Csere', desc: 'két szomszédos bonbont akkor is megcserél, ha nem jön ki belőle sor',
+      use: 'Cserélj meg két szomszédos bonbont, akkor is, ha nem jön ki sor.', from: 'A Konyha adja a 2. szinttől.',
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="#a3d4ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8 H18 M14 4 L18 8 L14 12"/><path d="M20 16 H6 M10 12 L6 16 L10 20"/></svg>' },
+    { id: 'shuffle', name: 'Keverés', desc: 'újrakeveri a táblát',
+      use: '', from: 'Szintenként egyszer jár.',
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd21f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7 H7 C11 7 13 17 17 17 H21 M18 14 L21 17 L18 20"/><path d="M3 17 H7 C8.8 17 10 15.2 11 13.2 M13 10.6 C14 8.6 15.2 7 17 7 H21 M18 4 L21 7 L18 10"/></svg>' },
+  ];
   const SHOP = [1, 1.15, 1.3, 1.5, 1.75, 2];
   const FACTORY = [[], ['s'], ['s', 's'], ['s', 's', 'wrap'], ['s', 's', 's', 'wrap'], ['s', 's', 's', 'wrap', 'bomb']];
   const FACTORY_TXT = ['', '1 csíkos bonbon', '2 csíkos bonbon', '2 csíkos és 1 csomagolt bonbon', '3 csíkos és 1 csomagolt bonbon', '3 csíkos, 1 csomagolt bonbon és 1 csokibomba'];
   const BUILDINGS = [
     { id: 'kitchen', name: 'Konyha', color: '#ff9ccb', dark: '#c2427f', roof: '#7a2461',
-      effect: l => `+${l} lépés minden szinten`,
+      effect: l => `+${l} lépés minden szinten` + (FREESWAP[l] ? `; ${FREESWAP[l]} szabad csere szintenként` : ''),
       cost: [{ cukor: 60 }, { cukor: 150, kakao: 10 }, { cukor: 300, kakao: 25 }, { cukor: 550, kakao: 50 }, { cukor: 900, kakao: 90 }] },
     { id: 'factory', name: 'Csokoládéüzem', color: '#b0744a', dark: '#5c3320', roof: '#3d1f12',
-      effect: l => `${FACTORY_TXT[l]} a tábla indulásakor`,
+      effect: l => `${FACTORY_TXT[l]} a tábla indulásakor` + (POUR[l] ? `; ${POUR[l]} csokiöntés szintenként` : ''),
       cost: [{ cukor: 80, kakao: 10 }, { cukor: 180, kakao: 30 }, { cukor: 350, kakao: 60 }, { cukor: 600, kakao: 100 }, { cukor: 1000, kakao: 160 }] },
+    { id: 'pastry', name: 'Cukrászműhely', color: '#f7d3e6', dark: '#c77fa8', roof: '#ff8fc2',
+      effect: l => `${WHISK[l]} habverő szintenként; egy teljes sort letarol, lépés nélkül`,
+      cost: [{ cukor: 90, kakao: 10 }, { cukor: 200, kakao: 25, zsele: 10 }, { cukor: 380, kakao: 55, zsele: 30 }, { cukor: 650, kakao: 95, zsele: 60 }, { cukor: 1050, kakao: 150, zsele: 110 }] },
     { id: 'workshop', name: 'Fakanálműhely', color: '#6fcdb4', dark: '#2f8a73', roof: '#1f5c4d',
       effect: l => `${HAMMER[l]} fakanál szintenként; bármely mezőt szétüt, lépés nélkül`,
       cost: [{ cukor: 50 }, { cukor: 140, zsele: 15 }, { cukor: 280, zsele: 35 }, { cukor: 500, zsele: 70 }, { cukor: 850, zsele: 120 }] },
@@ -336,20 +387,20 @@
   let waiters = [];
   let busy = false, selected = null, hintPair = null, lastAction = 0;
   let level = 1, goal = null, moves = 0, startMoves = 0, score = 0, nColors = 6;
-  let hammers = 0, hammerMode = false;
+  let charges = {}, boostMode = null, plusUsed = false, lastLoot = null, hintTimer = 0;
   let stats = { specials: 0, blocks: 0, locks: 0, jelly: 0 };
   let state = 'menu', levelOver = true;
   let now = 0;
 
   // ---------- mentés ----------
   const KEY = 'bonbonroppanto-v1';
-  let prog = { unlocked: 1, stars: {}, muted: false, res: { cukor: 0, kakao: 0, zsele: 0 }, base: { kitchen: 0, factory: 0, workshop: 0, shop: 0 } };
+  let prog = { unlocked: 1, stars: {}, muted: false, res: { cukor: 0, kakao: 0, zsele: 0 }, base: { kitchen: 0, factory: 0, pastry: 0, workshop: 0, shop: 0 } };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (s && typeof s === 'object') {
       prog = Object.assign(prog, s);
       prog.res = Object.assign({ cukor: 0, kakao: 0, zsele: 0 }, s.res || {});
-      prog.base = Object.assign({ kitchen: 0, factory: 0, workshop: 0, shop: 0 }, s.base || {});
+      prog.base = Object.assign({ kitchen: 0, factory: 0, pastry: 0, workshop: 0, shop: 0 }, s.base || {});
     }
   } catch (e) {}
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(prog)); } catch (e) {} }
@@ -886,16 +937,23 @@
       return;
     }
     const g = gen;
+    const free = boostMode === 'swap' && charges.swap > 0;
+    if (free) { charges.swap--; endBoost(); }
     busy = true; selected = null; hintPair = null;
     swapCells(a, b); pa.swap = pb.swap = true; sfx('swap');
     await settle(); if (g !== gen) return;
     if (pa.special === 'bomb' || pb.special === 'bomb' || (isSp(pa) && isSp(pb))) {
-      moves--; updateHud();
+      if (!free) moves--;
+      updateHud();
       await combine(pa, b, pb, a); if (g !== gen) return;
       await cascade(null, g);
     } else if (findRuns().length) {
-      moves--; updateHud();
+      if (!free) moves--;
+      updateHud();
       await cascade([a, b], g);
+    } else if (free) {
+      updateHud();
+      if (!findMove()) await shuffle();
     } else {
       swapCells(a, b); pa.swap = pb.swap = true; sfx('bad');
       await settle(); if (g !== gen) return;
@@ -907,15 +965,33 @@
     busy = false; lastAction = performance.now();
     checkEnd();
   }
-  async function useHammer(r, c) {
+  // Fakanál, habverő, csokiöntés: egy koppintott mezőből indulnak, lépésbe nem kerülnek.
+  async function useBoost(kind, r, c) {
     const p = grid[r][c];
-    if (busy || state !== 'play' || !p || hammers <= 0) return;
+    if (busy || state !== 'play' || !p || (charges[kind] || 0) <= 0) return;
+    if (kind === 'pour' && p.type < 0) { sfx('bad'); return; }
     const g = gen;
-    hammers--; hammerMode = false; busy = true; selected = null; hintPair = null;
-    if (p.type === BLOCK) p.hp = 1;
-    fx.push({ kind: 'o', r, c, t: 0, rad: .9 });
-    sfx('crack');
-    clearCells([[r, c]], 1);
+    charges[kind]--; endBoost();
+    busy = true; selected = null; hintPair = null;
+    const list = [];
+    if (kind === 'hammer') {
+      if (p.type === BLOCK) p.hp = 1;
+      list.push([r, c]);
+      fx.push({ kind: 'o', r, c, t: 0, rad: .9 });
+      sfx('crack');
+    } else if (kind === 'whisk') {
+      for (let i = 0; i < W; i++) list.push([r, i]);
+      fx.push({ kind: 'h', r, c, t: 0 });
+      sfx('special');
+    } else {
+      const col = p.type;
+      for (let r2 = 0; r2 < H; r2++) for (let c2 = 0; c2 < W; c2++) {
+        const q = grid[r2][c2];
+        if (q && q.type === col) { list.push([r2, c2]); fx.push({ kind: 'z', r, c, r2, c2, t: 0 }); }
+      }
+      sfx('special');
+    }
+    clearCells(list, 1);
     updateHud();
     await settle(); if (g !== gen) return;
     gravity();
@@ -924,6 +1000,55 @@
     updateHud();
     busy = false; lastAction = performance.now();
     checkEnd();
+  }
+  function endBoost() {
+    boostMode = null;
+    $('boostHint').hidden = true;
+  }
+  function showBoostHint(text, sticky) {
+    const h = $('boostHint');
+    h.textContent = text; h.hidden = false;
+    clearTimeout(hintTimer);
+    if (!sticky) hintTimer = setTimeout(() => { if (!boostMode) h.hidden = true; }, 2800);
+  }
+  function buildBoosts() {
+    const box = $('boostBar'); box.innerHTML = '';
+    for (const bo of BOOSTS) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'bst'; b.id = 'bst-' + bo.id;
+      b.innerHTML = `${bo.svg}<span>${bo.name}</span><span class="cnt"></span>`;
+      b.setAttribute('aria-label', bo.name);
+      b.addEventListener('click', () => pressBoost(bo));
+      box.append(b);
+    }
+    $('boostRules').innerHTML = BOOSTS.map(bo => `<li>${bo.svg}<div><b>${bo.name}:</b> <span>${bo.desc}. ${bo.from}</span></div></li>`).join('');
+  }
+  function renderBoosts() {
+    for (const bo of BOOSTS) {
+      const b = $('bst-' + bo.id); if (!b) continue;
+      const n = charges[bo.id] || 0;
+      b.querySelector('.cnt').textContent = n;
+      b.classList.toggle('empty', n <= 0);
+      b.classList.toggle('on', boostMode === bo.id);
+    }
+  }
+  async function pressBoost(bo) {
+    ensureAudio();
+    if (state !== 'play' || busy) return;
+    if (boostMode === bo.id) { endBoost(); selected = null; renderBoosts(); return; }
+    if ((charges[bo.id] || 0) <= 0) { sfx('bad'); showBoostHint(`${bo.name}: most nincs. ${bo.from}`); return; }
+    if (bo.id === 'shuffle') {
+      endBoost();
+      charges.shuffle--; busy = true; selected = null; hintPair = null;
+      renderBoosts();
+      const g = gen;
+      await shuffle(); if (g !== gen) return;
+      busy = false; lastAction = performance.now();
+      return;
+    }
+    boostMode = bo.id; selected = null; hintPair = null;
+    showBoostHint(bo.use, true);
+    renderBoosts();
   }
 
   // ---------- animáció ----------
@@ -989,7 +1114,7 @@
       ctx.strokeStyle = `rgba(255,200,74,${.7 + .3 * Math.sin(now * 8)})`;
       rr(ctx, c * cell + 2, r * cell + 2, cell - 4, cell - 4, cell * .2); ctx.stroke();
     }
-    const hint = hintPair && !busy && state === 'play' && !hammerMode;
+    const hint = hintPair && !busy && state === 'play' && !boostMode;
     const wig = Math.sin(now * 22) * cell * .06 * (((now * 1.2) % 1) < .45 ? 1 : 0);
     for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
       const p = grid[r] && grid[r][c]; if (!p) continue;
@@ -1005,7 +1130,7 @@
       } else drawPiece(ctx, p, cx, cy, cell, sc);
     }
     for (const o of popping) drawPiece(ctx, o.p, o.x * cell + cell / 2, o.y * cell + cell / 2, cell, 1 + o.t * .35, 1 - o.t);
-    if (hammerMode) {
+    if (boostMode && boostMode !== 'swap') {
       ctx.strokeStyle = `rgba(111,205,180,${.45 + .3 * Math.sin(now * 6)})`; ctx.lineWidth = 2;
       for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) if (mask[r][c] && grid[r][c]) { rr(ctx, c * cell + 3, r * cell + 3, cell - 6, cell - 6, cell * .2); ctx.stroke(); }
     }
@@ -1134,7 +1259,14 @@
     waiters = [];
     level = n; goal = makeLevel(n); nColors = goal.nc; score = 0;
     startMoves = goal.moves + prog.base.kitchen; moves = startMoves;
-    hammers = HAMMER[prog.base.workshop] || 0; hammerMode = false;
+    charges = {
+      hammer: HAMMER[prog.base.workshop] || 0,
+      whisk: WHISK[prog.base.pastry] || 0,
+      pour: POUR[prog.base.factory] || 0,
+      swap: FREESWAP[prog.base.kitchen] || 0,
+      shuffle: 1,
+    };
+    boostMode = null; plusUsed = false; $('boostHint').hidden = true;
     stats = { specials: 0, blocks: 0, locks: 0, jelly: 0 };
     popping = []; particles = []; floaters = []; fx = []; cheers = [];
     selected = null; hintPair = null; levelOver = false;
@@ -1174,7 +1306,7 @@
   }
   function checkEnd() {
     if (isWon()) {
-      state = 'over'; levelOver = true; hammerMode = false;
+      state = 'over'; levelOver = true; boostMode = null;
       const ratio = moves / startMoves;
       const st = ratio >= .25 ? 3 : ratio >= .1 ? 2 : 1;
       prog.stars[level] = Math.max(prog.stars[level] || 0, st);
@@ -1185,7 +1317,7 @@
       cheer('Kész!');
       setTimeout(() => showWin(st, got), 900);
     } else if (moves <= 0) {
-      state = 'over'; levelOver = true; hammerMode = false;
+      state = 'over'; levelOver = true; boostMode = null;
       const got = earn(false, 0);
       persist();
       sfx('lose');
@@ -1238,11 +1370,7 @@
     $('mv').textContent = moves;
     $('mvPill').classList.toggle('low', moves <= 5);
     $('scoreTxt').textContent = fmt(score) + ' pont';
-    const hb = $('hamBtn');
-    hb.hidden = !prog.base.workshop;
-    hb.textContent = hammerMode ? 'Válassz mezőt' : `Fakanál · ${hammers}`;
-    hb.disabled = hammers <= 0 && !hammerMode;
-    hb.classList.toggle('on', hammerMode);
+    renderBoosts();
     if (goal.type === 'score') {
       $('gScore').textContent = `${fmt(Math.min(score, goal.target))} / ${fmt(goal.target)}`;
       $('gBar').style.width = Math.min(100, score / goal.target * 100) + '%';
@@ -1278,7 +1406,7 @@
   }
   function goHome() {
     if (state === 'play') state = 'menu';
-    hammerMode = false; updateHud();
+    boostMode = null; updateHud();
     hideOverlays();
     home.hidden = false;
     renderHome();
@@ -1296,6 +1424,11 @@
     else txt = `Még ${goal.need.reduce((a, n) => a + n.left, 0)} bonbon hiányzott.`;
     $('loseTxt').textContent = txt;
     $('loseLoot').innerHTML = lootHtml(got);
+    lastLoot = got;
+    const pb = $('plusBtn');
+    pb.hidden = plusUsed;
+    pb.innerHTML = `+5 lépés · ${resChips(PLUS_COST)}`;
+    pb.disabled = !RES_KEYS.every(k => prog.res[k] - (got[k] || 0) >= (PLUS_COST[k] || 0));
     hideOverlays(); $('ovLose').hidden = false;
   }
   function updateSnd() { $('sndBtn').textContent = prog.muted ? 'Hang: ki' : 'Hang: be'; }
@@ -1303,9 +1436,9 @@
   // ---------- főképernyő: a cukrászda ----------
   const home = $('home'), hc = $('homeScene'), hctx = hc.getContext('2d');
   let hw = 0, hh = 0, homeRects = [], sheetFor = null, confetti = [];
-  const grow = { kitchen: 1, factory: 1, workshop: 1, shop: 1 };
-  const SLOTS = [.14, .38, .62, .86];
-  const ROOF_EXTRA = { kitchen: .7, factory: .48, workshop: .62, shop: .3 };
+  const grow = { kitchen: 1, factory: 1, pastry: 1, workshop: 1, shop: 1 };
+  const SLOTS = [.1, .3, .5, .7, .9];
+  const ROOF_EXTRA = { kitchen: .7, factory: .48, pastry: .82, workshop: .62, shop: .3 };
   const clouds = Array.from({ length: 5 }, (_, i) => ({ x: (i * .27) % 1, y: .05 + i * .05, s: .6 + (i % 3) * .3, v: .006 + (i % 2) * .006 }));
   const SPRINKLES = Array.from({ length: 34 }, (_, i) => ({ x: (i * .618) % 1, y: ((i * .377) % 1) * .4, c: i % 6, a: (i * 1.7) % 6.28 }));
   const canPay = cost => RES_KEYS.every(k => (prog.res[k] || 0) >= (cost[k] || 0));
@@ -1361,7 +1494,7 @@
   }
 
   function homeGeom(i, l) {
-    const bwid = Math.min(hw * .215, hh * .2);
+    const bwid = Math.min(hw * .178, hh * .2);
     const baseY = hh * (i % 2 ? .8 : .755);
     const hgt = l ? bwid * (.78 + l * .3) : bwid * .62;
     return { cx: hw * SLOTS[i], baseY, bwid, hgt };
@@ -1484,6 +1617,31 @@
       if (l >= 4) gear(g, bw2 - u * .02, top + u * .02, u * .08, reduced ? 0 : -now * 1.6, '#ffc84a');
       windows(g, l, u, top + u * .12, -u * .32);
       door(g, u, b.roof);
+    } else if (b.id === 'pastry') {
+      g.fillStyle = wall; g.fillRect(-bw2, top, u, hgt);
+      // emeletes torta a tetőn
+      let ty = top;
+      [[.56, .14, b.roof], [.42, .12, '#fff4ea'], [.28, .1, b.roof]].forEach(([w2, h2, col]) => {
+        g.fillStyle = col; rr(g, -u * w2, ty - u * h2, u * w2 * 2, u * h2 + 1, u * .04); g.fill();
+        g.fillStyle = col === b.roof ? '#fff4ea' : b.roof;
+        for (let k = 0; k < 5; k++) { g.beginPath(); g.arc(-u * w2 + u * .06 + k * (u * w2 * 2 - u * .12) / 4, ty - u * h2 + 1, u * .025, 0, Math.PI); g.fill(); }
+        ty -= u * h2;
+      });
+      g.save(); g.translate(0, ty); g.rotate(reduced ? 0 : Math.sin(now * 2.2) * .16);
+      g.strokeStyle = '#e8e4f0'; g.lineWidth = 1.5;
+      for (const rx of [.02, .05, .08]) { g.beginPath(); g.ellipse(0, -u * .13, u * rx, u * .12, 0, 0, Math.PI * 2); g.stroke(); }
+      g.strokeStyle = '#ff8fc2'; g.lineWidth = u * .07; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(0, -u * .25); g.lineTo(0, -u * .42); g.stroke();
+      g.restore();
+      if (l >= 3) {
+        for (let k = 0; k < 3; k++) {
+          const a = now * 1.5 + k * 2.1, sx = Math.cos(a) * u * .45, sy = top - u * .3 + Math.sin(a) * u * .12;
+          g.fillStyle = `rgba(255,240,180,${.5 + .5 * Math.sin(now * 4 + k)})`;
+          poly(g, [[sx, sy - 4], [sx + 1.2, sy - 1.2], [sx + 4, sy], [sx + 1.2, sy + 1.2], [sx, sy + 4], [sx - 1.2, sy + 1.2], [sx - 4, sy], [sx - 1.2, sy - 1.2]]); g.fill();
+        }
+      }
+      windows(g, l, u, top + u * .12, -u * .32);
+      door(g, u, b.dark);
     } else {
       const gH = Math.min(hgt, u * .66);
       g.fillStyle = wall; g.fillRect(-bw2, top, u, hgt);
@@ -1542,10 +1700,14 @@
   function cane(g, x, y, h, flip) {
     const w = Math.max(4, h * .07), d = flip ? -1 : 1;
     g.lineCap = 'round'; g.lineWidth = w;
-    g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - h); g.arc(x + d * h * .12, y - h, h * .12, Math.PI, 0, flip);
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - h);
+    // a kampó a szár tetejéből indul, a teteje felé ível, és lefelé végződik
+    if (flip) g.arc(x - h * .12, y - h, h * .12, 0, Math.PI, true);
+    else g.arc(x + h * .12, y - h, h * .12, Math.PI, 0, false);
+    g.lineTo(x + d * h * .24, y - h + h * .06);
     g.strokeStyle = '#fff4ea'; g.stroke();
     g.setLineDash([w * .9, w * .9]); g.strokeStyle = '#ff3b5c'; g.stroke(); g.setLineDash([]);
-    const bx = x + d * h * .24, by = y - h + h * .08;
+    const bx = x + d * h * .24, by = y - h + h * .1;
     const glow = g.createRadialGradient(bx, by, 1, bx, by, h * .3);
     glow.addColorStop(0, 'rgba(255,233,168,.7)'); glow.addColorStop(1, 'rgba(255,233,168,0)');
     g.fillStyle = glow; g.fillRect(bx - h * .3, by - h * .3, h * .6, h * .6);
@@ -1613,7 +1775,7 @@
     g.beginPath(); g.moveTo(0, ry + rh / 2); g.lineTo(hw, ry + rh / 2); g.stroke(); g.setLineDash([]);
     // épületek: előbb a hátsó sor
     homeRects = [];
-    for (const i of [0, 2, 1, 3]) {
+    for (const i of [0, 2, 4, 1, 3]) {
       const b = BUILDINGS[i], l = prog.base[b.id], geo = homeGeom(i, l);
       if (grow[b.id] < 1) grow[b.id] = Math.min(1, grow[b.id] + dt * 1.6);
       const sc = grow[b.id] < 1 ? Math.max(.05, easeBack(grow[b.id])) : 1;
@@ -1627,8 +1789,8 @@
       }
       homeRects.push({ b, x0: geo.cx - geo.bwid / 2 - 8, x1: geo.cx + geo.bwid / 2 + 8, y0, y1: bottom + 4, front: i % 2 });
     }
-    cane(g, hw * .26, hh * .975, hh * .12, false);
-    cane(g, hw * .74, hh * .975, hh * .12, true);
+    cane(g, hw * .035, hh * .975, hh * .12, false);
+    cane(g, hw * .965, hh * .975, hh * .12, true);
     cart(g, ((reduced ? .3 : now * .045) % 1.4 - .2) * hw, ry + rh * .72, Math.max(14, hh * .035));
     // konfetti
     for (const p of confetti) { p.vy += 380 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt * .7; p.rot += dt * 8; }
@@ -1663,11 +1825,19 @@
   $('nextBtn').addEventListener('click', () => { ensureAudio(); startLevel(level + 1); });
   $('retryBtn').addEventListener('click', () => { ensureAudio(); startLevel(level); });
   $('sndBtn').addEventListener('click', () => { ensureAudio(); prog.muted = !prog.muted; persist(); updateSnd(); });
-  $('hamBtn').addEventListener('click', () => {
-    if (state !== 'play' || busy) return;
-    if (!hammerMode && hammers <= 0) return;
-    hammerMode = !hammerMode; selected = null;
-    updateHud();
+  $('plusBtn').addEventListener('click', () => {
+    if (plusUsed || !lastLoot) return;
+    // a vesztes szintért kapott nyersanyagot visszavesszük, hiszen a szint folytatódik
+    const after = k => prog.res[k] - (lastLoot[k] || 0);
+    if (!RES_KEYS.every(k => after(k) >= (PLUS_COST[k] || 0))) return;
+    for (const k of RES_KEYS) prog.res[k] = after(k) - (PLUS_COST[k] || 0);
+    lastLoot = null; plusUsed = true;
+    persist();
+    ensureAudio(); sfx('make');
+    moves += 5; levelOver = false; state = 'play';
+    hideOverlays(); updateHud();
+    cheer('+5 lépés');
+    lastAction = performance.now();
   });
 
   // ---------- érintés ----------
@@ -1687,7 +1857,7 @@
     lastAction = performance.now(); hintPair = null;
   });
   cv.addEventListener('pointermove', e => {
-    if (!down || down.moved || hammerMode) return;
+    if (!down || down.moved || (boostMode && boostMode !== 'swap')) return;
     const rect = cv.getBoundingClientRect();
     const th = rect.width / W * .35;
     const dx = e.clientX - down.x, dy = e.clientY - down.y;
@@ -1702,7 +1872,7 @@
     if (!down.moved && state === 'play' && !busy) {
       const p = down.pos;
       const piece = grid[p[0]][p[1]];
-      if (hammerMode) { useHammer(p[0], p[1]); down = null; return; }
+      if (boostMode && boostMode !== 'swap') { useBoost(boostMode, p[0], p[1]); down = null; return; }
       if (selected && selected[0] === p[0] && selected[1] === p[1]) selected = null;
       else if (selected && Math.abs(selected[0] - p[0]) + Math.abs(selected[1] - p[1]) === 1) { const s = selected; selected = null; trySwap(s, p); }
       else if (piece && fixed(piece)) { sfx('bad'); piece.s = .8; selected = null; }
@@ -1736,11 +1906,18 @@
   new ResizeObserver(layout).observe(wrap);
 
   updateSnd();
+  buildBoosts();
   prepare(prog.unlocked);
   renderHome();
   requestAnimationFrame(frame);
 })();
 </script>
 <!-- ARTIFACT-END -->
+<script>
+  // Offline működés a saját webcímen (a Claude artifactban nem fut).
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
 </body>
 </html>
